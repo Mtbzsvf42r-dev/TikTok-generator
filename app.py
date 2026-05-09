@@ -150,22 +150,32 @@ def send_email_with_videos(video_paths):
 def index():
     return jsonify({"status": "ok", "message": "TikTok Generator API"})
 
+import threading
+
 @app.route('/generate', methods=['POST'])
 def generate():
-    try:
-        scripts_data = generate_scripts()
-        video_paths = []
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for i, video_data in enumerate(scripts_data['videos']):
-                slides = video_data['slides']
-                palette = PALETTES[i % len(PALETTES)]
-                output_path = os.path.join(tmpdir, f"video_{i+1}_{video_data['angle'].replace('/', '_')}.mp4")
-                create_video(slides, palette, output_path)
-                video_paths.append(output_path)
-            send_email_with_videos(video_paths)
-        return jsonify({"status": "success", "message": "3 videos generees et envoyees par mail"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    def run_in_background():
+        try:
+            scripts_data = generate_scripts()
+            video_paths = []
+            with tempfile.TemporaryDirectory() as tmpdir:
+                for i, video_data in enumerate(scripts_data['videos']):
+                    slides = video_data['slides']
+                    palette = PALETTES[i % len(PALETTES)]
+                    output_path = os.path.join(tmpdir, f"video_{i+1}.mp4")
+                    create_video(slides, palette, output_path)
+                    video_paths.append(output_path)
+                send_email_with_videos(video_paths)
+        except Exception as e:
+            print(f"Erreur background: {e}")
+    
+    thread = threading.Thread(target=run_in_background)
+    thread.start()
+    return jsonify({"status": "success", "message": "Generation en cours, tu recevras un mail dans quelques minutes"})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
